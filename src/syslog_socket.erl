@@ -298,8 +298,7 @@ init([Transport, TransportOptions, Protocol,
                     timeout = Timeout},
     case transport_open(State0) of
         {ok, StateN} ->
-            {ok, StateN#state{hostname = hostname(),
-                              os_pid = os:getpid()}};
+            {ok, protocol_init(StateN)};
         {error, _} = Error ->
             {stop, Error, State0}
     end.
@@ -350,6 +349,14 @@ code_change(_, State, _) ->
 %%% Private functions
 %%%------------------------------------------------------------------------
 
+protocol_init(#state{protocol = rfc3164} = State) ->
+    HostnameOnly = lists:takewhile(fun(C) -> C /= $. end, hostname()),
+    State#state{hostname = HostnameOnly,
+                os_pid = os:getpid()};
+protocol_init(#state{protocol = rfc5424} = State) ->
+    State#state{hostname = hostname(),
+                os_pid = os:getpid()}.
+
 protocol_pri(Severity, #state{facility = Facility}) ->
     PRIVAL = (Facility bsl 3) + severity(Severity),
     [$<, int_to_dec_list(PRIVAL), $>].
@@ -365,7 +372,7 @@ protocol_header(Timestamp, MessageId,
         Transport =:= local ->
             [];
         true ->
-            [lists:takewhile(fun(C) -> C /= $. end, Hostname), SP]
+            [Hostname, SP]
     end,
     TIMESTAMP = timestamp_rfc3164(Timestamp),
     MSGID_SP = case MessageId of
