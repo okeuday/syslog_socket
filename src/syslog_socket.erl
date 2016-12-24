@@ -95,6 +95,7 @@
                         {utf8, boolean()} |
                         {facility, facility()} |
                         {app_name, app_name()} |
+                        {path, string()} |
                         {host, inet:ip_address() | inet:hostname()} |
                         {port, undefined | inet:port_number()} |
                         {timeout, timeout_milliseconds()}).
@@ -135,6 +136,9 @@
 %% Connection is immediate within the new Erlang process.
 %% @end
 %%-------------------------------------------------------------------------
+
+-spec start_link(Options :: options()) ->
+    {ok, pid()} | {error, any()}.
 
 start_link(Options) when is_list(Options) ->
     Defaults = [{transport, ?TRANSPORT_DEFAULT},
