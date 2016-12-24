@@ -71,6 +71,7 @@
 -define(FACILITY_DEFAULT, local0).
 -define(TIMEOUT_DEFAULT, 5000). % milliseconds
 -define(TIMEOUT_MAX_ERLANG, 4294967295). % milliseconds
+-define(SP, $\s).
 
 -type transport() :: local | udp | tcp | tls.
 -type protocol() :: rfc3164 | rfc5424.
@@ -325,8 +326,9 @@ handle_cast({send, Severity, Timestamp0, MessageId, Data}, State) ->
     end,
     PRI = protocol_pri(Severity, State),
     HEADER = protocol_header(TimestampN, MessageId, State),
+    DATA = protocol_data(State),
     MSG = protocol_msg(Data, State),
-    ok = transport_send([PRI, HEADER, MSG], State),
+    ok = transport_send([PRI, HEADER, DATA, MSG], State),
     {noreply, State};
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -375,33 +377,31 @@ protocol_header(Timestamp, MessageId,
                        app_name = APP_NAME,
                        hostname = Hostname,
                        os_pid = PROCID}) ->
-    SP = $\s,
     HOSTNAME_SP = if
         Transport =:= local ->
             [];
         true ->
-            [Hostname, SP]
+            [Hostname, ?SP]
     end,
     TIMESTAMP = timestamp_rfc3164(Timestamp),
-    MSGID_SP = case MessageId of
+    SP_MSGID = case MessageId of
         [] ->
             [];
         <<>> ->
             [];
         _ ->
-            [MessageId, SP]
+            [?SP, MessageId]
     end,
-    [TIMESTAMP, SP,
+    [TIMESTAMP, ?SP,
      HOSTNAME_SP,
      % extra information as MSG prefix
-     APP_NAME, $[, PROCID, $], $:, SP, MSGID_SP];
+     APP_NAME, $[, PROCID, $], $:, SP_MSGID];
 protocol_header(Timestamp, MessageId,
                 #state{protocol = rfc5424,
                        app_name = APP_NAME,
                        hostname = HOSTNAME,
                        os_pid = PROCID}) ->
     VERSION = "1",
-    SP = $\s,
     TIMESTAMP = timestamp_rfc5424(Timestamp),
     MSGID = case MessageId of
         [] ->
@@ -411,21 +411,27 @@ protocol_header(Timestamp, MessageId,
         _ ->
             truncate(MessageId, 32)
     end,
-    [VERSION, SP,
-     TIMESTAMP, SP,
-     truncate(HOSTNAME, 255), SP,
-     truncate(APP_NAME, 48), SP,
-     PROCID, SP,
-     MSGID, SP].
+    [VERSION, ?SP,
+     TIMESTAMP, ?SP,
+     truncate(HOSTNAME, 255), ?SP,
+     truncate(APP_NAME, 48), ?SP,
+     PROCID, ?SP,
+     MSGID].
+
+protocol_data(#state{protocol = rfc3164}) ->
+    [];
+protocol_data(#state{protocol = rfc5424}) ->
+    STRUCTURED_DATA = $-,
+    [?SP, STRUCTURED_DATA].
 
 protocol_msg(Data,
              #state{utf8 = UTF8,
                     utf8_bom = UTF8BOM}) ->
     if
         UTF8 =:= true ->
-            [UTF8BOM, Data];
+            [?SP, UTF8BOM, Data];
         UTF8 =:= false ->
-            Data % ASCII
+            [?SP, Data] % ASCII
     end.
 
 timestamp_rfc3164({_, _, _} = Timestamp) ->
