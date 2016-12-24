@@ -67,7 +67,7 @@
 
 -define(TRANSPORT_DEFAULT, local).
 -define(PROTOCOL_DEFAULT, rfc3164).
--define(UTF8_DEFAULT, false).
+-define(UTF8_DEFAULT, true).
 -define(FACILITY_DEFAULT, local0).
 -define(TIMEOUT_DEFAULT, 5000). % milliseconds
 -define(TIMEOUT_MAX_ERLANG, 4294967295). % milliseconds
@@ -153,11 +153,11 @@ start_link(Options) when is_list(Options) ->
     true = is_list(AppName) andalso is_integer(hd(AppName)), % required
     if
         Protocol =:= rfc3164 ->
-            false = UTF8;
+            ok;
         Protocol =:= rfc5424 ->
-            true = (length(AppName) =< 48),
-            true = is_boolean(UTF8)
+            true = (length(AppName) =< 48)
     end,
+    true = is_boolean(UTF8),
     Facility = facility(FacilityValue),
     true = is_integer(Timeout) andalso
            (Timeout > 0) andalso (Timeout =< ?TIMEOUT_MAX_ERLANG),
@@ -415,12 +415,7 @@ protocol_header(Timestamp, MessageId,
      MSGID, SP].
 
 protocol_msg(Data,
-             #state{protocol = rfc3164,
-                    utf8 = false}) ->
-    Data; % ASCII
-protocol_msg(Data,
-             #state{protocol = rfc5424,
-                    utf8 = UTF8,
+             #state{utf8 = UTF8,
                     utf8_bom = UTF8BOM}) ->
     if
         UTF8 =:= true ->
