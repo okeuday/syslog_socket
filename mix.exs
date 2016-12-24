@@ -3,7 +3,7 @@ defmodule SyslogSocket.Mixfile do
 
   def project do
     [app: :syslog_socket,
-     version: "0.1.0",
+     version: "0.2.0",
      language: :erlang,
      description: description(),
      package: package(),
@@ -11,12 +11,11 @@ defmodule SyslogSocket.Mixfile do
   end
 
   def application do
-    [applications: [
-       :uuid]]
+    []
   end
 
   defp deps do
-    [{:uuid, "~> 1.5.4", hex: :uuid_erl}]
+    []
   end
 
   defp description do

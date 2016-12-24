@@ -45,7 +45,7 @@
 %%%
 %%% @author Michael Truog <mjtruog [at] gmail (dot) com>
 %%% @copyright 2016 Michael Truog
-%%% @version 0.1.0 {@date} {@time}
+%%% @version 0.2.0 {@date} {@time}
 %%%------------------------------------------------------------------------
 -module(syslog_socket).
 -author('mjtruog [at] gmail (dot) com').
@@ -76,7 +76,7 @@
 -type transport() :: local | udp | tcp | tls.
 -type protocol() :: rfc3164 | rfc5424.
 -type timeout_milliseconds() :: 1..?TIMEOUT_MAX_ERLANG.
--type app_name() :: string().
+-type app_name() :: nonempty_string().
 -type facility() :: kernel | user | mail | daemon | auth0 | syslog |
                     print | news | uucp | clock0 | auth1 | ftp | ntp |
                     auth2 | auth3 | clock1 | local0 | local1 | local2 |
@@ -96,7 +96,7 @@
                         {utf8, boolean()} |
                         {facility, facility()} |
                         {app_name, app_name()} |
-                        {path, string()} |
+                        {path, nonempty_string()} |
                         {host, inet:ip_address() | inet:hostname()} |
                         {port, undefined | inet:port_number()} |
                         {timeout, timeout_milliseconds()}).
@@ -374,13 +374,13 @@ protocol_header(Severity, Timestamp, MessageId,
                        hostname = Hostname,
                        os_pid = PROCID}) ->
     PRIVAL = (Facility bsl 3) + severity(Severity),
+    TIMESTAMP = timestamp_rfc3164(Timestamp),
     HOSTNAME_SP = if
         Transport =:= local ->
             [];
         true ->
             [Hostname, ?SP]
     end,
-    TIMESTAMP = timestamp_rfc3164(Timestamp),
     SP_MSGID = case MessageId of
         [] ->
             [];
@@ -400,8 +400,8 @@ protocol_header(Severity, Timestamp, MessageId,
                        app_name = APP_NAME,
                        hostname = HOSTNAME,
                        os_pid = PROCID}) ->
-    VERSION = "1",
     PRIVAL = (Facility bsl 3) + severity(Severity),
+    VERSION = $1,
     TIMESTAMP = timestamp_rfc5424(Timestamp),
     MSGID = case MessageId of
         [] ->
