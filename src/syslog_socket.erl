@@ -80,10 +80,14 @@
                     print | news | uucp | clock0 | auth1 | ftp | ntp |
                     auth2 | auth3 | clock1 | local0 | local1 | local2 |
                     local3 | local4 | local5 | local6 | local7 |
-                    non_neg_integer().
+                    non_neg_integer() |
+                    % common aliases
+                    auth | authpriv | cron | kern | lpr | security.
 -type severity() :: emergency | alert | critical | error | warning |
                     notice | informational | debug |
-                    0..7.
+                    0..7 |
+                    % common aliases
+                    emerg | panic | crit | err | warn.
 -type message_id() :: string() | binary().
 -type options() :: list({transport, transport()} |
                         {transport_options, list()} |
@@ -636,6 +640,12 @@ facility(local4) ->        20; % local use 4
 facility(local5) ->        21; % local use 5
 facility(local6) ->        22; % local use 6
 facility(local7) ->        23; % local use 7
+facility(auth) ->          facility(auth0);
+facility(authpriv) ->      facility(auth1);
+facility(cron) ->          facility(clock0);
+facility(kern) ->          facility(kernel);
+facility(lpr) ->           facility(print);
+facility(security) ->      facility(auth0);
 facility(Facility) when is_integer(Facility), Facility >= 0 ->
     Facility.
 
@@ -650,6 +660,11 @@ severity(warning) ->        4; % warning conditions
 severity(notice) ->         5; % normal but significant condition
 severity(informational) ->  6; % informational messages
 severity(debug) ->          7; % debug-level messages
+severity(emerg) ->          severity(emergency);
+severity(panic) ->          severity(emergency);
+severity(crit) ->           severity(critical);
+severity(err) ->            severity(error);
+severity(warn) ->           severity(warning);
 severity(Severity) when is_integer(Severity), Severity >= 0, Severity =< 7 ->
     Severity.
 
