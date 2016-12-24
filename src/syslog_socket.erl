@@ -81,9 +81,9 @@
                     auth2 | auth3 | clock1 | local0 | local1 | local2 |
                     local3 | local4 | local5 | local6 | local7 |
                     non_neg_integer().
--type priority() :: emergency | alert | critical | error | warning |
+-type severity() :: emergency | alert | critical | error | warning |
                     notice | informational | debug |
-                    non_neg_integer().
+                    0..7.
 -type message_id() :: string() | binary().
 -type options() :: list({transport, transport()} |
                         {transport_options, list()} |
@@ -99,7 +99,7 @@
               timeout_milliseconds/0,
               app_name/0,
               facility/0,
-              priority/0,
+              severity/0,
               message_id/0,
               options/0]).
 
@@ -226,12 +226,12 @@ stop_link(Pid, Timeout) ->
 %%-------------------------------------------------------------------------
 
 -spec send(Pid :: pid(),
-           Priority :: priority(),
+           Severity :: severity(),
            Data :: iodata()) ->
     ok.
 
-send(Pid, Priority, Data) ->
-    send(Pid, Priority, undefined, "", Data).
+send(Pid, Severity, Data) ->
+    send(Pid, Severity, undefined, "", Data).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -240,13 +240,13 @@ send(Pid, Priority, Data) ->
 %%-------------------------------------------------------------------------
 
 -spec send(Pid :: pid(),
-           Priority :: priority(),
+           Severity :: severity(),
            Timestamp :: undefined | erlang:timestamp(),
            Data :: iodata()) ->
     ok.
 
-send(Pid, Priority, Timestamp, Data) ->
-    send(Pid, Priority, Timestamp, "", Data).
+send(Pid, Severity, Timestamp, Data) ->
+    send(Pid, Severity, Timestamp, "", Data).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -255,14 +255,14 @@ send(Pid, Priority, Timestamp, Data) ->
 %%-------------------------------------------------------------------------
 
 -spec send(Pid :: pid(),
-           Priority :: priority(),
+           Severity :: severity(),
            Timestamp :: undefined | erlang:timestamp(),
            MessageId :: message_id(),
            Data :: iodata()) ->
     ok.
 
-send(Pid, Priority, Timestamp, MessageId, Data) ->
-    gen_server:cast(Pid, {send, Priority, Timestamp, MessageId, Data}).
+send(Pid, Severity, Timestamp, MessageId, Data) ->
+    gen_server:cast(Pid, {send, Severity, Timestamp, MessageId, Data}).
 
 %%%------------------------------------------------------------------------
 %%% Callback functions from gen_server
@@ -293,14 +293,14 @@ handle_call(stop, _, State) ->
 handle_call(Request, _, State) ->
     {stop, {error, {call, Request}}, State}.
 
-handle_cast({send, Priority, Timestamp0, MessageId, Data}, State) ->
+handle_cast({send, Severity, Timestamp0, MessageId, Data}, State) ->
     TimestampN = case Timestamp0 of
         undefined ->
             uuid:get_v1_time(os);
         {_, _, _} ->
             Timestamp0
     end,
-    PRI = protocol_pri(Priority, State),
+    PRI = protocol_pri(Severity, State),
     HEADER = protocol_header(TimestampN, MessageId, State),
     MSG = protocol_msg(Data, State),
     ok = transport_send([PRI, HEADER, MSG], State),
@@ -324,8 +324,8 @@ code_change(_, State, _) ->
 %%% Private functions
 %%%------------------------------------------------------------------------
 
-protocol_pri(Priority, #state{facility = Facility}) ->
-    PRIVAL = (Facility bsl 3) + priority(Priority),
+protocol_pri(Severity, #state{facility = Facility}) ->
+    PRIVAL = (Facility bsl 3) + severity(Severity),
     [$<, int_to_dec_list(PRIVAL), $>].
 
 protocol_header(Timestamp, MessageId,
@@ -527,19 +527,20 @@ facility(local4) ->        20; % local use 4
 facility(local5) ->        21; % local use 5
 facility(local6) ->        22; % local use 6
 facility(local7) ->        23; % local use 7
-facility(Facility) when is_integer(Facility), Facility >= 0 -> Facility.
+facility(Facility) when is_integer(Facility), Facility >= 0 ->
+    Facility.
 
-
--spec priority(Priority :: priority()) ->
+-spec severity(Severity :: severity()) ->
     non_neg_integer().
 
-priority(emergency) ->      0; % system is unusable
-priority(alert) ->          1; % action must be taken immediately
-priority(critical) ->       2; % critical conditions
-priority(error) ->          3; % error conditions
-priority(warning) ->        4; % warning conditions
-priority(notice) ->         5; % normal but significant condition
-priority(informational) ->  6; % informational messages
-priority(debug) ->          7; % debug-level messages
-priority(Priority) when is_integer(Priority), Priority >= 0 -> Priority.
+severity(emergency) ->      0; % system is unusable
+severity(alert) ->          1; % action must be taken immediately
+severity(critical) ->       2; % critical conditions
+severity(error) ->          3; % error conditions
+severity(warning) ->        4; % warning conditions
+severity(notice) ->         5; % normal but significant condition
+severity(informational) ->  6; % informational messages
+severity(debug) ->          7; % debug-level messages
+severity(Severity) when is_integer(Severity), Severity >= 0, Severity =< 7 ->
+    Severity.
 
