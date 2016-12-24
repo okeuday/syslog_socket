@@ -324,11 +324,10 @@ handle_cast({send, Severity, Timestamp0, MessageId, Data}, State) ->
         {_, _, _} ->
             Timestamp0
     end,
-    PRI = protocol_pri(Severity, State),
-    HEADER = protocol_header(TimestampN, MessageId, State),
+    HEADER = protocol_header(Severity, TimestampN, MessageId, State),
     DATA = protocol_data(State),
     MSG = protocol_msg(Data, State),
-    ok = transport_send([PRI, HEADER, DATA, MSG], State),
+    ok = transport_send([HEADER, DATA, MSG], State),
     {noreply, State};
 handle_cast(stop, State) ->
     {stop, normal, State};
@@ -367,16 +366,14 @@ protocol_init(#state{protocol = rfc5424} = State) ->
     State#state{hostname = hostname(),
                 os_pid = os:getpid()}.
 
-protocol_pri(Severity, #state{facility = Facility}) ->
-    PRIVAL = (Facility bsl 3) + severity(Severity),
-    [$<, int_to_dec_list(PRIVAL), $>].
-
-protocol_header(Timestamp, MessageId,
+protocol_header(Severity, Timestamp, MessageId,
                 #state{transport = Transport,
                        protocol = rfc3164,
+                       facility = Facility,
                        app_name = APP_NAME,
                        hostname = Hostname,
                        os_pid = PROCID}) ->
+    PRIVAL = (Facility bsl 3) + severity(Severity),
     HOSTNAME_SP = if
         Transport =:= local ->
             [];
@@ -392,16 +389,19 @@ protocol_header(Timestamp, MessageId,
         _ ->
             [?SP, MessageId]
     end,
-    [TIMESTAMP, ?SP,
+    [$<, int_to_dec_list(PRIVAL), $>,
+     TIMESTAMP, ?SP,
      HOSTNAME_SP,
      % extra information as MSG prefix
      APP_NAME, $[, PROCID, $], $:, SP_MSGID];
-protocol_header(Timestamp, MessageId,
+protocol_header(Severity, Timestamp, MessageId,
                 #state{protocol = rfc5424,
+                       facility = Facility,
                        app_name = APP_NAME,
                        hostname = HOSTNAME,
                        os_pid = PROCID}) ->
     VERSION = "1",
+    PRIVAL = (Facility bsl 3) + severity(Severity),
     TIMESTAMP = timestamp_rfc5424(Timestamp),
     MSGID = case MessageId of
         [] ->
@@ -411,7 +411,8 @@ protocol_header(Timestamp, MessageId,
         _ ->
             truncate(MessageId, 32)
     end,
-    [VERSION, ?SP,
+    [$<, int_to_dec_list(PRIVAL), $>,
+     VERSION, ?SP,
      TIMESTAMP, ?SP,
      truncate(HOSTNAME, 255), ?SP,
      truncate(APP_NAME, 48), ?SP,
