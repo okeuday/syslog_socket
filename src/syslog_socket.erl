@@ -87,7 +87,7 @@
                     notice | informational | debug |
                     0..7 |
                     % common aliases
-                    emerg | panic | crit | err | warn.
+                    emerg | panic | crit | err | warn | info.
 -type message_id() :: string() | binary().
 -type options() :: list({transport, transport()} |
                         {transport_options, list()} |
@@ -665,6 +665,7 @@ severity(panic) ->          severity(emergency);
 severity(crit) ->           severity(critical);
 severity(err) ->            severity(error);
 severity(warn) ->           severity(warning);
+severity(info) ->           severity(informational);
 severity(Severity) when is_integer(Severity), Severity >= 0, Severity =< 7 ->
     Severity.
 
