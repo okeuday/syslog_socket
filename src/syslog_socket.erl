@@ -118,7 +118,7 @@
             utf8_bom :: binary(),
             facility :: non_neg_integer(),
             app_name :: app_name(),
-            path :: string(),
+            path :: nonempty_string(),
             host :: inet:ip_address() | inet:hostname(),
             port :: inet:port_number(),
             timeout :: pos_integer(),
