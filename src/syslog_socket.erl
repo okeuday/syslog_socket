@@ -65,14 +65,14 @@
          handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(TRANSPORT_DEFAULT, udp).
+-define(TRANSPORT_DEFAULT, local).
 -define(PROTOCOL_DEFAULT, rfc3164).
 -define(UTF8_DEFAULT, false).
 -define(FACILITY_DEFAULT, local0).
 -define(TIMEOUT_DEFAULT, 5000). % milliseconds
 -define(TIMEOUT_MAX_ERLANG, 4294967295). % milliseconds
 
--type transport() :: udp | tcp | tls.
+-type transport() :: local | udp | tcp | tls.
 -type protocol() :: rfc3164 | rfc5424.
 -type timeout_milliseconds() :: 1..?TIMEOUT_MAX_ERLANG.
 -type app_name() :: string().
@@ -112,6 +112,7 @@
             utf8_bom :: binary(),
             facility :: non_neg_integer(),
             app_name :: app_name(),
+            path :: string(),
             host :: inet:ip_address() | inet:hostname(),
             port :: inet:port_number(),
             timeout :: pos_integer(),
@@ -138,11 +139,13 @@ start_link(Options) when is_list(Options) ->
                 {utf8, ?UTF8_DEFAULT},
                 {facility, ?FACILITY_DEFAULT},
                 {app_name, undefined},
+                {path, "/dev/log"},
                 {host, {127,0,0,1}},
                 {port, undefined},
                 {timeout, ?TIMEOUT_DEFAULT}],
-    [Transport, TransportOptionsValue, Protocol, UTF8, FacilityValue,
-     AppName, Host, PortValue, Timeout] = take_values(Defaults, Options),
+    [Transport, TransportOptionsValue, Protocol,
+     UTF8, FacilityValue, AppName,
+     Path, Host, PortValue, Timeout] = take_values(Defaults, Options),
     true = is_list(AppName) andalso is_integer(hd(AppName)), % required
     if
         Protocol =:= rfc3164 ->
@@ -155,6 +158,13 @@ start_link(Options) when is_list(Options) ->
     true = is_integer(Timeout) andalso
            (Timeout > 0) andalso (Timeout =< ?TIMEOUT_MAX_ERLANG),
     TransportOptions = if
+        Transport =:= local ->
+            if
+                TransportOptionsValue =:= undefined ->
+                    [local];
+                is_list(TransportOptionsValue) ->
+                    [local | TransportOptionsValue]
+            end;
         Transport =:= udp ->
             if
                 TransportOptionsValue =:= undefined ->
@@ -177,9 +187,12 @@ start_link(Options) when is_list(Options) ->
                    (length(TransportOptionsValue) > 0),
             TransportOptionsValue
     end,
+    true = is_list(Path) andalso is_integer(hd(Path)),
     Port = if
         PortValue =:= undefined ->
             if
+                Transport =:= local ->
+                    0;
                 Transport =:= udp ->
                     514;
                 Transport =:= tcp ->
@@ -192,7 +205,8 @@ start_link(Options) when is_list(Options) ->
     end,
     gen_server:start_link(?MODULE,
                           [Transport, TransportOptions, Protocol,
-                           UTF8, Facility, AppName, Host, Port, Timeout], []).
+                           UTF8, Facility, AppName,
+                           Path, Host, Port, Timeout], []).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -269,7 +283,8 @@ send(Pid, Severity, Timestamp, MessageId, Data) ->
 %%%------------------------------------------------------------------------
 
 init([Transport, TransportOptions, Protocol,
-      UTF8, Facility, AppName, Host, Port, Timeout]) ->
+      UTF8, Facility, AppName,
+      Path, Host, Port, Timeout]) ->
     State0 = #state{transport = Transport,
                     transport_options = TransportOptions,
                     protocol = Protocol,
@@ -277,6 +292,7 @@ init([Transport, TransportOptions, Protocol,
                     utf8_bom = unicode:encoding_to_bom(utf8),
                     facility = Facility,
                     app_name = AppName,
+                    path = Path,
                     host = Host,
                     port = Port,
                     timeout = Timeout},
@@ -310,6 +326,16 @@ handle_cast(stop, State) ->
 handle_cast(Request, State) ->
     {stop, {error, {cast, Request}}, State}.
 
+handle_info({Error, Socket}, #state{socket = Socket} = State)
+    when Error =:= udp_closed;
+         Error =:= tcp_closed;
+         Error =:= ssl_closed ->
+    {stop, {error, Error}, State#state{socket = undefined}};
+handle_info({Error, Socket}, #state{socket = Socket} = State)
+    when Error =:= udp_error;
+         Error =:= tcp_error;
+         Error =:= ssl_error ->
+    {stop, {error, Error}, State};
 handle_info(Request, State) ->
     {stop, {error, {info, Request}}, State}.
 
@@ -329,24 +355,31 @@ protocol_pri(Severity, #state{facility = Facility}) ->
     [$<, int_to_dec_list(PRIVAL), $>].
 
 protocol_header(Timestamp, MessageId,
-                #state{protocol = rfc3164,
+                #state{transport = Transport,
+                       protocol = rfc3164,
                        app_name = APP_NAME,
-                       hostname = HOSTNAME,
+                       hostname = Hostname,
                        os_pid = PROCID}) ->
     SP = $\s,
+    HOSTNAME_SP = if
+        Transport =:= local ->
+            [];
+        true ->
+            [lists:takewhile(fun(C) -> C /= $. end, Hostname), SP]
+    end,
     TIMESTAMP = timestamp_rfc3164(Timestamp),
-    MSGID = case MessageId of
+    MSGID_SP = case MessageId of
         [] ->
             [];
         <<>> ->
             [];
         _ ->
-            [SP, MessageId]
+            [MessageId, SP]
     end,
     [TIMESTAMP, SP,
-     HOSTNAME, SP,
+     HOSTNAME_SP,
      % extra information as MSG prefix
-     APP_NAME, $[, PROCID, $], $:, MSGID, SP];
+     APP_NAME, $[, PROCID, $], $:, SP, MSGID_SP];
 protocol_header(Timestamp, MessageId,
                 #state{protocol = rfc5424,
                        app_name = APP_NAME,
@@ -430,8 +463,9 @@ timestamp_rfc5424({_, _, MicroSeconds} = Timestamp) ->
      MicroSeconds2, MicroSeconds3,
      MicroSeconds4, MicroSeconds5, $Z].
 
-transport_open(#state{transport = udp,
-                      transport_options = TransportOptions} = State) ->
+transport_open(#state{transport = Transport,
+                      transport_options = TransportOptions} = State)
+    when Transport =:= local; Transport =:= udp ->
     try gen_udp:open(0, TransportOptions) of
         {ok, Socket} ->
             {ok, State#state{socket = Socket}};
@@ -470,11 +504,15 @@ transport_open(#state{transport = tls,
             {error, {ErrorType, ErrorReason}}
     end.
 
+transport_send(Data, #state{transport = local,
+                            path = Path,
+                            port = Port,
+                            socket = Socket}) ->
+    ok = gen_udp:send(Socket, {local, Path}, Port, Data);
 transport_send(Data, #state{transport = udp,
                             host = Host,
                             port = Port,
                             socket = Socket}) ->
-io:format("XXX ~p~n", [Data]),
     ok = gen_udp:send(Socket, Host, Port, Data);
 transport_send(Data, #state{transport = tcp,
                             socket = Socket}) ->
@@ -483,8 +521,11 @@ transport_send(Data, #state{transport = tls,
                             socket = Socket}) ->
     ok = ssl:send(Socket, Data).
 
-transport_close(#state{transport = udp,
-                       socket = Socket}) ->
+transport_close(#state{socket = undefined}) ->
+    ok;
+transport_close(#state{transport = Transport,
+                       socket = Socket})
+    when Transport =:= local; Transport =:= udp ->
     _ = (catch gen_udp:close(Socket)),
     ok;
 transport_close(#state{transport = tcp,
@@ -497,11 +538,12 @@ transport_close(#state{transport = tls,
     ok.
 
 hostname() ->
-    case string:tokens(erlang:atom_to_list(node()), "@") of
-        [_, "nohost"] ->
+    case lists:dropwhile(fun(C) -> C /= $@ end,
+                         erlang:atom_to_list(node())) of
+        [$@ | "nohost"] ->
             {ok, Hostname} = inet:gethostname(),
             Hostname;
-        [_, FQDN] ->
+        [$@ | FQDN] ->
             FQDN
     end.
 
