@@ -8,7 +8,6 @@ A minimal syslog client interface that supports both
 Build
 -----
 
-    rebar get-deps
     rebar compile
 
 Author
