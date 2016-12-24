@@ -428,6 +428,8 @@ protocol_msg(Data,
              #state{utf8 = UTF8,
                     utf8_bom = UTF8BOM}) ->
     if
+        Data == <<>>; Data == [] ->
+            [];
         UTF8 =:= true ->
             [?SP, UTF8BOM, Data];
         UTF8 =:= false ->
