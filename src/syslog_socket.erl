@@ -204,7 +204,7 @@ start_link(Options) when is_list(Options) ->
     ok.
 
 stop_link(Pid) ->
-    gen_server:cast(Pid, close).
+    gen_server:cast(Pid, stop).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -217,7 +217,7 @@ stop_link(Pid) ->
     ok.
 
 stop_link(Pid, Timeout) ->
-    gen_server:call(Pid, close, Timeout).
+    gen_server:call(Pid, stop, Timeout).
 
 %%-------------------------------------------------------------------------
 %% @doc
@@ -296,7 +296,7 @@ handle_call(Request, _, State) ->
 handle_cast({send, Severity, Timestamp0, MessageId, Data}, State) ->
     TimestampN = case Timestamp0 of
         undefined ->
-            uuid:get_v1_time(os);
+            os:timestamp();
         {_, _, _} ->
             Timestamp0
     end,
@@ -334,7 +334,7 @@ protocol_header(Timestamp, MessageId,
                        hostname = HOSTNAME,
                        os_pid = PROCID}) ->
     SP = $\s,
-    TIMESTAMP = uuid:get_v1_datetime(Timestamp),
+    TIMESTAMP = timestamp_rfc3164(Timestamp),
     MSGID = case MessageId of
         [] ->
             [];
@@ -354,7 +354,7 @@ protocol_header(Timestamp, MessageId,
                        os_pid = PROCID}) ->
     VERSION = "1",
     SP = $\s,
-    TIMESTAMP = uuid:get_v1_datetime(Timestamp),
+    TIMESTAMP = timestamp_rfc5424(Timestamp),
     MSGID = case MessageId of
         [] ->
             $-;
@@ -384,6 +384,51 @@ protocol_msg(Data,
         UTF8 =:= false ->
             Data % ASCII
     end.
+
+timestamp_rfc3164({_, _, _} = Timestamp) ->
+    {{_, DateMM, DateDD},
+     {TimeHH, TimeMM, TimeSS}} = calendar:now_to_local_time(Timestamp),
+    [DateMM0, DateMM1, DateMM2] = if
+        DateMM ==  1 -> "Jan";
+        DateMM ==  2 -> "Feb";
+        DateMM ==  3 -> "Mar";
+        DateMM ==  4 -> "Apr";
+        DateMM ==  5 -> "May";
+        DateMM ==  6 -> "Jun";
+        DateMM ==  7 -> "Jul";
+        DateMM ==  8 -> "Aug";
+        DateMM ==  9 -> "Sep";
+        DateMM == 10 -> "Oct";
+        DateMM == 11 -> "Nov";
+        DateMM == 12 -> "Dec"
+    end,
+    [DateDD0, DateDD1] = int_to_dec_list(DateDD, 2, $\s),
+    [TimeHH0, TimeHH1] = int_to_dec_list(TimeHH, 2, $0),
+    [TimeMM0, TimeMM1] = int_to_dec_list(TimeMM, 2, $0),
+    [TimeSS0, TimeSS1] = int_to_dec_list(TimeSS, 2, $0),
+    [DateMM0, DateMM1, DateMM2, $\s,
+     DateDD0, DateDD1, $\s,
+     TimeHH0, TimeHH1, $:, TimeMM0, TimeMM1, $:, TimeSS0, TimeSS1].
+
+timestamp_rfc5424({_, _, MicroSeconds} = Timestamp) ->
+    {{DateYYYY, DateMM, DateDD},
+     {TimeHH, TimeMM, TimeSS}} = calendar:now_to_universal_time(Timestamp),
+    [DateYYYY0, DateYYYY1,
+     DateYYYY2, DateYYYY3] = int_to_dec_list(DateYYYY, 4, $0),
+    [DateMM0, DateMM1] = int_to_dec_list(DateMM, 2, $0),
+    [DateDD0, DateDD1] = int_to_dec_list(DateDD, 2, $0),
+    [TimeHH0, TimeHH1] = int_to_dec_list(TimeHH, 2, $0),
+    [TimeMM0, TimeMM1] = int_to_dec_list(TimeMM, 2, $0),
+    [TimeSS0, TimeSS1] = int_to_dec_list(TimeSS, 2, $0),
+    [MicroSeconds0, MicroSeconds1,
+     MicroSeconds2, MicroSeconds3,
+     MicroSeconds4, MicroSeconds5] = int_to_dec_list(MicroSeconds, 6, $0),
+    [DateYYYY0, DateYYYY1, DateYYYY2, DateYYYY3, $-,
+     DateMM0, DateMM1, $-, DateDD0, DateDD1, $T,
+     TimeHH0, TimeHH1, $:, TimeMM0, TimeMM1, $:, TimeSS0, TimeSS1, $.,
+     MicroSeconds0, MicroSeconds1,
+     MicroSeconds2, MicroSeconds3,
+     MicroSeconds4, MicroSeconds5, $Z].
 
 transport_open(#state{transport = udp,
                       transport_options = TransportOptions} = State) ->
@@ -429,6 +474,7 @@ transport_send(Data, #state{transport = udp,
                             host = Host,
                             port = Port,
                             socket = Socket}) ->
+io:format("XXX ~p~n", [Data]),
     ok = gen_udp:send(Socket, Host, Port, Data);
 transport_send(Data, #state{transport = tcp,
                             socket = Socket}) ->
@@ -492,6 +538,20 @@ int_to_dec_list(L, I)
     [int_to_dec(I) | L];
 int_to_dec_list(L, I) ->
     int_to_dec_list([int_to_dec(I rem 10) | L], I div 10).
+
+int_to_dec_list(I, N, Char) when is_integer(I), I >= 0 ->
+    int_to_dec_list([], I, 1, N, Char).
+
+int_to_dec_list(L, I, Count, N, Char)
+    when I < 10 ->
+    int_to_list_pad([int_to_dec(I) | L], N - Count, Char);
+int_to_dec_list(L, I, Count, N, Char) ->
+    int_to_dec_list([int_to_dec(I rem 10) | L], I div 10, Count + 1, N, Char).
+
+int_to_list_pad(L, 0, _) ->
+    L;
+int_to_list_pad(L, Count, Char) ->
+    int_to_list_pad([Char | L], Count - 1, Char).
 
 int_to_dec(I) when 0 =< I, I =< 9 ->
     I + $0.
