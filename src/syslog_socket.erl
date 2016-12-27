@@ -58,7 +58,11 @@
          stop_link/2,
          send/3,
          send/4,
-         send/5]).
+         send/5,
+         facility/1,
+         facility_valid/1,
+         severity/1,
+         severity_valid/1]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -286,6 +290,110 @@ send(Pid, Severity, Timestamp, Data) ->
 
 send(Pid, Severity, Timestamp, MessageId, Data) ->
     gen_server:cast(Pid, {send, Severity, Timestamp, MessageId, Data}).
+
+% facility and severity values are based on
+% https://tools.ietf.org/html/rfc3164#section-4.1.1
+% https://tools.ietf.org/html/rfc5424#section-6.2.1
+
+%%-------------------------------------------------------------------------
+%% @doc
+%% ===Get the syslog facility numerical value.===
+%% @end
+%%-------------------------------------------------------------------------
+
+-spec facility(Facility :: facility()) ->
+    non_neg_integer().
+
+facility(kernel) ->         0; % kernel messages
+facility(user) ->           1; % user-level messages
+facility(mail) ->           2; % mail system
+facility(daemon) ->         3; % system daemons
+facility(auth0) ->          4; % security/authorization messages 0
+facility(syslog) ->         5; % messages generated internally by syslogd
+facility(print) ->          6; % line printer subsystem
+facility(news) ->           7; % network news subsystem
+facility(uucp) ->           8; % UUCP subsystem
+facility(clock0) ->         9; % clock daemon 0
+facility(auth1) ->         10; % security/authorization messages 1
+facility(ftp) ->           11; % FTP daemon
+facility(ntp) ->           12; % NTP subsystem
+facility(auth2) ->         13; % log audit (security/authorization 2)
+facility(auth3) ->         14; % log alert (security/authorization 3)
+facility(clock1) ->        15; % clock daemon 1
+facility(local0) ->        16; % local use 0
+facility(local1) ->        17; % local use 1
+facility(local2) ->        18; % local use 2
+facility(local3) ->        19; % local use 3
+facility(local4) ->        20; % local use 4
+facility(local5) ->        21; % local use 5
+facility(local6) ->        22; % local use 6
+facility(local7) ->        23; % local use 7
+facility(auth) ->          facility(auth0);
+facility(authpriv) ->      facility(auth1);
+facility(cron) ->          facility(clock0);
+facility(kern) ->          facility(kernel);
+facility(lpr) ->           facility(print);
+facility(security) ->      facility(auth0);
+facility(Facility) when is_integer(Facility), Facility >= 0 ->
+    Facility.
+
+%%-------------------------------------------------------------------------
+%% @doc
+%% ===Test the validity of a syslog facility value.===
+%% @end
+%%-------------------------------------------------------------------------
+
+-spec facility_valid(Facility :: facility()) ->
+    boolean().
+
+facility_valid(Facility) ->
+    try facility(Facility) of
+        _ -> true
+    catch
+        _:_ -> false
+    end.
+
+%%-------------------------------------------------------------------------
+%% @doc
+%% ===Get the syslog severity numerical value.===
+%% @end
+%%-------------------------------------------------------------------------
+
+-spec severity(Severity :: severity()) ->
+    non_neg_integer().
+
+severity(emergency) ->      0; % system is unusable
+severity(alert) ->          1; % action must be taken immediately
+severity(critical) ->       2; % critical conditions
+severity(error) ->          3; % error conditions
+severity(warning) ->        4; % warning conditions
+severity(notice) ->         5; % normal but significant condition
+severity(informational) ->  6; % informational messages
+severity(debug) ->          7; % debug-level messages
+severity(emerg) ->          severity(emergency);
+severity(panic) ->          severity(emergency);
+severity(crit) ->           severity(critical);
+severity(err) ->            severity(error);
+severity(warn) ->           severity(warning);
+severity(info) ->           severity(informational);
+severity(Severity) when is_integer(Severity), Severity >= 0, Severity =< 7 ->
+    Severity.
+
+%%-------------------------------------------------------------------------
+%% @doc
+%% ===Test the validity of a syslog severity value.===
+%% @end
+%%-------------------------------------------------------------------------
+
+-spec severity_valid(Severity :: severity()) ->
+    boolean().
+
+severity_valid(Severity) ->
+    try severity(Severity) of
+        _ -> true
+    catch
+        _:_ -> false
+    end.
 
 %%%------------------------------------------------------------------------
 %%% Callback functions from gen_server
@@ -616,64 +724,4 @@ int_to_list_pad(L, Count, Char) ->
 
 int_to_dec(I) when 0 =< I, I =< 9 ->
     I + $0.
-
-% based on
-% https://tools.ietf.org/html/rfc3164#section-4.1.1
-% https://tools.ietf.org/html/rfc5424#section-6.2.1
-
--spec facility(Facility :: facility()) ->
-    non_neg_integer().
-
-facility(kernel) ->         0; % kernel messages
-facility(user) ->           1; % user-level messages
-facility(mail) ->           2; % mail system
-facility(daemon) ->         3; % system daemons
-facility(auth0) ->          4; % security/authorization messages 0
-facility(syslog) ->         5; % messages generated internally by syslogd
-facility(print) ->          6; % line printer subsystem
-facility(news) ->           7; % network news subsystem
-facility(uucp) ->           8; % UUCP subsystem
-facility(clock0) ->         9; % clock daemon 0
-facility(auth1) ->         10; % security/authorization messages 1
-facility(ftp) ->           11; % FTP daemon
-facility(ntp) ->           12; % NTP subsystem
-facility(auth2) ->         13; % log audit (security/authorization 2)
-facility(auth3) ->         14; % log alert (security/authorization 3)
-facility(clock1) ->        15; % clock daemon 1
-facility(local0) ->        16; % local use 0
-facility(local1) ->        17; % local use 1
-facility(local2) ->        18; % local use 2
-facility(local3) ->        19; % local use 3
-facility(local4) ->        20; % local use 4
-facility(local5) ->        21; % local use 5
-facility(local6) ->        22; % local use 6
-facility(local7) ->        23; % local use 7
-facility(auth) ->          facility(auth0);
-facility(authpriv) ->      facility(auth1);
-facility(cron) ->          facility(clock0);
-facility(kern) ->          facility(kernel);
-facility(lpr) ->           facility(print);
-facility(security) ->      facility(auth0);
-facility(Facility) when is_integer(Facility), Facility >= 0 ->
-    Facility.
-
--spec severity(Severity :: severity()) ->
-    non_neg_integer().
-
-severity(emergency) ->      0; % system is unusable
-severity(alert) ->          1; % action must be taken immediately
-severity(critical) ->       2; % critical conditions
-severity(error) ->          3; % error conditions
-severity(warning) ->        4; % warning conditions
-severity(notice) ->         5; % normal but significant condition
-severity(informational) ->  6; % informational messages
-severity(debug) ->          7; % debug-level messages
-severity(emerg) ->          severity(emergency);
-severity(panic) ->          severity(emergency);
-severity(crit) ->           severity(critical);
-severity(err) ->            severity(error);
-severity(warn) ->           severity(warning);
-severity(info) ->           severity(informational);
-severity(Severity) when is_integer(Severity), Severity >= 0, Severity =< 7 ->
-    Severity.
 
