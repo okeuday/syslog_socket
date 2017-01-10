@@ -3,7 +3,7 @@ defmodule SyslogSocket.Mixfile do
 
   def project do
     [app: :syslog_socket,
-     version: "0.2.0",
+     version: "1.6.0",
      language: :erlang,
      description: description(),
      package: package(),
