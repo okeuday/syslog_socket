@@ -196,11 +196,11 @@ string_find(SearchPattern, String) ->
                     lists:flatten(String)
             end,
             SearchPatternList = if
-				is_binary(SearchPattern) ->
-					erlang:binary_to_list(SearchPattern);
-				is_list(SearchPattern) ->
-					lists:flatten(SearchPattern)
-			end,
+                is_binary(SearchPattern) ->
+                    erlang:binary_to_list(SearchPattern);
+                is_list(SearchPattern) ->
+                    lists:flatten(SearchPattern)
+            end,
             case string:str(StringList, SearchPatternList) of
                 0 ->
                     nomatch;
