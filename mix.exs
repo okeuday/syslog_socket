@@ -6,7 +6,7 @@ defmodule SyslogSocket.Mixfile do
 
   def project do
     [app: :syslog_socket,
-     version: "1.7.4",
+     version: "1.7.5",
      language: :erlang,
      erlc_options: [
        {:d, :erlang.list_to_atom('ERLANG_OTP_VERSION_' ++ :erlang.system_info(:otp_release))},
@@ -42,7 +42,7 @@ defmodule SyslogSocket.Mixfile do
   end
 
   defp package do
-    [files: ~w(src doc rebar.config README.markdown LICENSE),
+    [files: ~w(src doc test rebar.config README.markdown LICENSE),
      maintainers: ["Michael Truog"],
      licenses: ["MIT"],
      links: %{"GitHub" => "https://github.com/okeuday/syslog_socket"}]
